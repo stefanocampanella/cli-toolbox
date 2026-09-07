@@ -36,7 +36,7 @@ ZELLIJ_LAYOUT_DIR="$ZELLIJ_CONFIG_DIR/layouts"
 ZELLIJ_DEFAULT_LAYOUT="$ZELLIJ_LAYOUT_DIR/default.kdl"
 
 mkdir -p "$ZELLIJ_LAYOUT_DIR"
-if [ ! -f "$ZELLIJ_DEFAULT_LAYOUT" ]; then
+if [ ! -f "$ZELLIJ_DEFAULT_LAYOUT" ] || grep -q "new_tab_template" "$ZELLIJ_DEFAULT_LAYOUT" 2>/dev/null; then
     cat << 'EOF' > "$ZELLIJ_DEFAULT_LAYOUT"
 layout {
     default_tab_template {
@@ -48,23 +48,14 @@ layout {
             plugin location="status-bar"
         }
     }
-    pane command="bash" {
-        args "--login"
-    }
-    new_tab_template {
-        pane size=1 borderless=true {
-            plugin location="tab-bar"
-        }
+    tab {
         pane command="bash" {
             args "--login"
-        }
-        pane size=1 borderless=true {
-            plugin location="status-bar"
         }
     }
 }
 EOF
-    echo "Configured Zellij default layout in $ZELLIJ_DEFAULT_LAYOUT (loads login shell)."
+    echo "Configured Zellij default layout in $ZELLIJ_DEFAULT_LAYOUT (loads login shell with tab and status bars)."
 else
     echo "Zellij default layout already exists at $ZELLIJ_DEFAULT_LAYOUT (left unmodified)."
 fi

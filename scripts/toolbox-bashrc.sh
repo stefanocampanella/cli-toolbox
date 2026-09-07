@@ -33,10 +33,22 @@ _tb() {
 # ~/.bashrc), unlike per-tool wrapper scripts or symlinks in ~/bin.
 for _tb_tool in eza rg fd bat zoxide dust duf procs btm delta sd choose xh \
                 hyperfine tokei lazygit broot tldr zellij nvim tmux \
-                fzf starship; do
+                fzf; do
     eval "${_tb_tool}() { _tb ${_tb_tool} \"\$@\"; }"
 done
 unset _tb_tool
+
+starship() {
+    if [ "${1:-}" = "init" ]; then
+        if [[ "$*" == *"--print-full-init"* ]]; then
+            _tb starship "$@" | sed 's|/opt/bin/starship|starship|g'
+        else
+            _tb starship "$@" --print-full-init | sed 's|/opt/bin/starship|starship|g'
+        fi
+    else
+        _tb starship "$@"
+    fi
+}
 
 # --- 4. Key bindings & completion -------------------------------------------
 # fzf's Ctrl-T / Ctrl-R / Alt-C, zoxide's `z`/`zi`, the starship prompt, and
