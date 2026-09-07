@@ -191,11 +191,14 @@ From: ubuntu:24.04
     #      source via cargo instead, which always gets the true latest
     #      published version regardless of release-asset packaging.
     apt-get update
-    apt-get install -y --no-install-recommends cargo rustc pkg-config libssl-dev
+    apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+    export PATH="/root/.cargo/bin:$PATH"
     cargo install --locked --root /opt tokei
     cargo install --locked --root /opt broot
-    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev jq
-    rm -rf /var/lib/apt/lists/* /root/.cargo /root/.cache
+    rustup self uninstall -y || true
+    apt-get purge -y --auto-remove build-essential pkg-config libssl-dev jq
+    rm -rf /var/lib/apt/lists/* /root/.cargo /root/.rustup /root/.cache
 
     # ------------------------------------------------------------------
     # Bake shell integration (key bindings + completions) into the image
