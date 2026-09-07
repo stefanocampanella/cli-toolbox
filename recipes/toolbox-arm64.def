@@ -35,7 +35,7 @@ From: ubuntu:24.04
 #
 # A handful of tools either don't reliably publish aarch64 binaries at all,
 # or their asset naming isn't stable enough to hardcode with confidence.
-# For those (procs, choose, broot, tokei, jless) this file builds from
+# For those (procs, choose, broot, tokei) this file builds from
 # source via cargo instead of guessing a download URL, then removes the
 # Rust toolchain again so it doesn't bloat the final image.
 #
@@ -207,10 +207,10 @@ From: ubuntu:24.04
     #      build from source instead of guessing a URL -----------------------
     apt-get update
     apt-get install -y --no-install-recommends cargo rustc pkg-config libssl-dev
-    for crate in procs choose broot tokei jless; do
+    for crate in procs choose broot tokei; do
         cargo install --locked --root /opt "$crate"
     done
-    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev
+    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev jq
     rm -rf /var/lib/apt/lists/* /root/.cargo /root/.cache
 
     # ------------------------------------------------------------------

@@ -19,7 +19,7 @@ This project packages ~20 modern CLI tools into a single container image. Regard
 |---|---|
 | **Core Replacements** | `eza` (ls), `ripgrep` / `rg` (grep), `fd` (find), `bat` (cat), `zoxide` (cd) |
 | **System & Disk** | `dust` (du), `duf` (df), `procs` (ps), `bottom` / `btm` (top/htop) |
-| **Text & Utilities** | `delta` (diff/pager), `sd` (sed), `choose` (cut/awk), `xh` (curl/httpie), `jq`, `jless` |
+| **Text & Utilities** | `delta` (diff/pager), `sd` (sed), `choose` (cut/awk), `xh` (curl/httpie) |
 | **Terminal & Workflow** | `zellij` (tmux/screen), `tmux`, `neovim` / `nvim`, `lazygit`, `broot`, `tldr`, `fzf` |
 | **Productivity & Dev** | `starship` (prompt), `hyperfine` (benchmarking), `tokei` (code stats) |
 

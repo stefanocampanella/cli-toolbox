@@ -181,10 +181,6 @@ From: ubuntu:24.04
     fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-x86_64-musl$' tldr
     install -m755 tldr /opt/bin/tldr
 
-    # jless (interactive JSON viewer) -- last confirmed release: v0.9.0
-    fetch_gh_asset PaulJuliusMartinez/jless v0.9.0 'jless-v0\.9\.0-x86_64-unknown-linux-musl\.tar\.gz$' jless.tar.gz
-    tar xf jless.tar.gz && install -m755 jless /opt/bin/jless
-
     # starship prompt -- install script always grabs the current latest release
     curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /opt/bin
 
@@ -198,7 +194,7 @@ From: ubuntu:24.04
     apt-get install -y --no-install-recommends cargo rustc pkg-config libssl-dev
     cargo install --locked --root /opt tokei
     cargo install --locked --root /opt broot
-    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev
+    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev jq
     rm -rf /var/lib/apt/lists/* /root/.cargo /root/.cache
 
     # ------------------------------------------------------------------

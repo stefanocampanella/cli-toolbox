@@ -31,8 +31,8 @@ _tb() {
 # Costs ZERO extra inodes (functions live only in the already-existing
 # ~/.bashrc), unlike per-tool wrapper scripts or symlinks in ~/bin.
 for _tb_tool in eza rg fd bat zoxide dust duf procs btm delta sd choose xh \
-                hyperfine tokei lazygit broot tldr jless zellij nvim tmux \
-                jq fzf starship; do
+                hyperfine tokei lazygit broot tldr zellij nvim tmux \
+                fzf starship; do
     eval "${_tb_tool}() { _tb ${_tb_tool} \"\$@\"; }"
 done
 unset _tb_tool
