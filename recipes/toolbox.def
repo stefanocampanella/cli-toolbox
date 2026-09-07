@@ -89,7 +89,8 @@ From: ubuntu:24.04
     && rm -rf /var/lib/apt/lists/*
 
     mkdir -p /opt/bin /opt/etc
-    cd /tmp
+    BUILD_DIR=$(mktemp -d)
+    cd "$BUILD_DIR"
 
     # Set permissions and symlinks for toolbox installer and scripts
     chmod +x /opt/bin/toolbox-install
@@ -239,7 +240,7 @@ From: ubuntu:24.04
     } > /opt/etc/shell-integration.bash
 
     # cleanup build artifacts to keep the final image small
-    cd / && rm -rf /tmp/* /root/.cache
+    cd / && rm -rf "$BUILD_DIR" /root/.cache
 
 %environment
     export PATH=/opt/bin:$PATH
