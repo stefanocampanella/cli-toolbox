@@ -80,11 +80,12 @@ From: ubuntu:24.04
     # on the section header itself.)
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
+    export PATH="/opt/bin:$PATH"
 
     apt-get update
     apt-get install -y --no-install-recommends \
         ca-certificates curl wget tar xz-utils unzip git jq \
-        ripgrep fd-find bat zoxide fzf tmux neovim \
+        ripgrep fd-find bat zoxide tmux neovim \
     && rm -rf /var/lib/apt/lists/*
 
     mkdir -p /opt/bin /opt/etc
@@ -176,6 +177,10 @@ From: ubuntu:24.04
     fetch_gh_asset jesseduffield/lazygit v0.65.0 'lazygit_0\.65\.0_linux_x86_64\.tar\.gz$' lazygit.tar.gz
     tar xf lazygit.tar.gz && install -m755 lazygit /opt/bin/lazygit
 
+    # fzf (fuzzy finder) -- latest: v0.74.3
+    fetch_gh_asset junegunn/fzf v0.74.3 'fzf-.*-linux_amd64\.tar\.gz$' fzf.tar.gz
+    tar xf fzf.tar.gz && install -m755 fzf /opt/bin/fzf
+
     # tealdeer / tldr (quick docs) -- project moved to tealdeer-rs/tealdeer;
     # latest: v1.9.0
     fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-x86_64-musl$' tldr
@@ -213,23 +218,23 @@ From: ubuntu:24.04
         echo
 
         echo "# --- fzf: Ctrl-T (file), Ctrl-R (history), Alt-C (cd) + completion ---"
-        /opt/bin/fzf --bash
+        fzf --bash
         echo
 
         echo "# --- zoxide: 'z'/'zi' smart cd ---"
-        /opt/bin/zoxide init bash
+        zoxide init bash
         echo
 
         echo "# --- starship prompt ---"
-        /opt/bin/starship init bash
+        starship init bash
         echo
 
         echo "# --- ripgrep completion ---"
-        /opt/bin/rg --generate complete-bash 2>/dev/null || true
+        rg --generate complete-bash 2>/dev/null || true
         echo
 
         echo "# --- fd completion ---"
-        /opt/bin/fd --gen-completions bash 2>/dev/null || true
+        fd --gen-completions bash 2>/dev/null || true
         echo
     } > /opt/etc/shell-integration.bash
 

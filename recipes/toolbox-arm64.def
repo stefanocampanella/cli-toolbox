@@ -102,11 +102,12 @@ From: ubuntu:24.04
     # on the section header itself.)
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
+    export PATH="/opt/bin:$PATH"
 
     apt-get update
     apt-get install -y --no-install-recommends \
         ca-certificates curl wget tar xz-utils unzip git jq \
-        ripgrep fd-find bat zoxide fzf tmux neovim \
+        ripgrep fd-find bat zoxide tmux neovim \
     && rm -rf /var/lib/apt/lists/*
     # ^ apt resolves these to their native aarch64 packages automatically
     #   as long as this %post runs inside an aarch64 container - no changes
@@ -195,6 +196,10 @@ From: ubuntu:24.04
     fetch_gh_asset jesseduffield/lazygit v0.65.0 'lazygit_0\.65\.0_linux_arm64\.tar\.gz$' lazygit.tar.gz
     tar xf lazygit.tar.gz && install -m755 lazygit /opt/bin/lazygit
 
+    # fzf (fuzzy finder) -- latest: v0.74.3
+    fetch_gh_asset junegunn/fzf v0.74.3 'fzf-.*-linux_arm64\.tar\.gz$' fzf.tar.gz
+    tar xf fzf.tar.gz && install -m755 fzf /opt/bin/fzf
+
     # tealdeer / tldr (quick docs) - project moved to tealdeer-rs/tealdeer;
     # musl target published for aarch64
     fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-aarch64-musl$' tldr
@@ -229,23 +234,23 @@ From: ubuntu:24.04
         echo
 
         echo "# --- fzf: Ctrl-T (file), Ctrl-R (history), Alt-C (cd) + completion ---"
-        /opt/bin/fzf --bash
+        fzf --bash
         echo
 
         echo "# --- zoxide: 'z'/'zi' smart cd ---"
-        /opt/bin/zoxide init bash
+        zoxide init bash
         echo
 
         echo "# --- starship prompt ---"
-        /opt/bin/starship init bash
+        starship init bash
         echo
 
         echo "# --- ripgrep completion ---"
-        /opt/bin/rg --generate complete-bash 2>/dev/null || true
+        rg --generate complete-bash 2>/dev/null || true
         echo
 
         echo "# --- fd completion ---"
-        /opt/bin/fd --gen-completions bash 2>/dev/null || true
+        fd --gen-completions bash 2>/dev/null || true
         echo
     } > /opt/etc/shell-integration.bash
 
