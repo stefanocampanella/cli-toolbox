@@ -223,11 +223,11 @@ From: ubuntu:24.04
         echo
 
         echo "# --- zoxide: 'z'/'zi' smart cd ---"
-        zoxide init bash
+        zoxide init bash | sed -e 's|\\command zoxide|zoxide|g' -e 's|command zoxide|zoxide|g'
         echo
 
         echo "# --- starship prompt ---"
-        starship init bash
+        starship init bash | sed 's|/opt/bin/starship|starship|g'
         echo
 
         echo "# --- ripgrep completion ---"
@@ -246,6 +246,7 @@ From: ubuntu:24.04
     export PATH=/opt/bin:$PATH
     export LC_ALL=C.UTF-8
     export LANG=C.UTF-8
+    export ZELLIJ_SOCKET_DIR="${ZELLIJ_SOCKET_DIR:-/tmp/zellij-${USER:-$UID}}"
 
 %runscript
     if [ "${1:-}" = "install" ] || [ "${1:-}" = "toolbox-install" ]; then

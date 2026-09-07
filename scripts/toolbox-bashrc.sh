@@ -5,6 +5,7 @@
 
 export TOOLBOX_SIF="${TOOLBOX_SIF:-$HOME/toolbox.sif}"
 export TOOLBOX_INSTANCE="${TOOLBOX_INSTANCE:-toolbox}"
+export ZELLIJ_SOCKET_DIR="${ZELLIJ_SOCKET_DIR:-/tmp/zellij-${USER:-$UID}}"
 
 # --- 1. Ensure the background instance is running -------------------------
 # `instance start` pays the squashfs-mount/namespace-setup cost ONCE. Every
