@@ -1,0 +1,258 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+# ---------------------------------------------------------------------------
+# "toolbox.sif" - modern CLI replacements, packed into a single SquashFS file
+#
+# Rationale: on HPC systems $HOME often has an INODE quota, not just a space
+# quota. Installing ~20 Rust/Go tools natively (cargo install, per-tool
+# ~/.local/bin, shared libs, etc.) can burn tens of thousands of inodes.
+# A Singularity/Apptainer image is one file on disk, so no matter how much
+# software lives inside it, it costs your quota a single inode.
+#
+# Build (needs root or --fakeroot; most HPC users won't have this on the
+# cluster itself - build on a workstation/laptop/CI runner and copy the
+# resulting .sif to the cluster, or use the Sylabs/Apptainer remote builder):
+#
+#   apptainer build --fakeroot toolbox.sif recipes/toolbox.def
+#   apptainer build --remote toolbox.sif recipes/toolbox.def
+#
+# Versions below were the latest stable release of each project as of
+# 2026-09-06. Release asset names occasionally change between versions (and
+# some projects stop shipping prebuilt binaries entirely - see tokei/broot
+# below) - rather than hardcode a filename that can silently 404 on the next
+# bump, every download below resolves the actual asset URL from the GitHub
+# API at build time (see fetch_gh_asset), matched by a regex pattern.
+# ---------------------------------------------------------------------------
+
+%files
+    scripts/toolbox-bashrc.sh /opt/etc/toolbox-bashrc.sh
+    scripts/toolbox-install.sh /opt/bin/toolbox-install
+
+%labels
+    Author      you@example.org
+    Description Modern CLI tool replacements bundled as a single-file image
+    Version     1.1
+
+%help
+    Install toolbox integration into ~/.bashrc:
+        apptainer run --app install toolbox.sif
+        # or
+        apptainer run toolbox.sif install
+        # or
+        apptainer exec toolbox.sif toolbox-install
+
+    One-off usage:
+        apptainer exec toolbox.sif <tool> [args...]
+        apptainer shell toolbox.sif          # interactive shell with PATH set
+
+    Recommended (fast, persistent) usage - keep a background instance
+    running and exec into it, avoiding per-command container startup cost:
+        apptainer instance start toolbox.sif toolbox
+        apptainer exec instance://toolbox rg --hidden "TODO" .
+        apptainer instance stop toolbox
+
+    Shell integration (fzf key bindings, zoxide, starship, completions)
+    baked in at build time:
+        source <(apptainer exec instance://toolbox cat /opt/etc/shell-integration.bash)
+
+    See the accompanying ~/.bashrc integration script: it starts the instance once per
+    login node, defines a shell function per tool, and sources the
+    integration script above - giving you "native" commands with ZERO
+    extra inodes in $HOME beyond the .sif file itself.
+
+%apprun install
+    exec /opt/bin/toolbox-install "$@"
+
+%apphelp install
+    Installs the toolbox by appending the shell integration snippet to ~/.bashrc.
+    Usage:
+        apptainer run --app install <image.sif> [target_bashrc]
+
+%post -c /bin/bash
+    # ^ IMPORTANT: `-c /bin/bash` on the %post line forces this section to
+    # run under bash. Without it, Apptainer's remote builder (and some local
+    # configurations) run %post under /bin/sh, which on Debian/Ubuntu is
+    # dash - dash has no `pipefail`, so `set -euo pipefail` aborts
+    # immediately with "Illegal option -o pipefail" before any of the
+    # commands below ever run. (Unlike %runscript/%test, %post does NOT
+    # honor an in-body `#!` shebang line - the shell must be selected here,
+    # on the section header itself.)
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl wget tar xz-utils unzip git jq \
+        ripgrep fd-find bat zoxide fzf tmux neovim \
+    && rm -rf /var/lib/apt/lists/*
+
+    mkdir -p /opt/bin /opt/etc
+    cd /tmp
+
+    # Set permissions and symlinks for toolbox installer and scripts
+    chmod +x /opt/bin/toolbox-install
+    chmod 644 /opt/etc/toolbox-bashrc.sh
+    ln -sf /opt/bin/toolbox-install /opt/bin/install-toolbox
+
+    # Ubuntu ships fd-find / bat under different binary names to avoid
+    # clashing with older unrelated packages - normalize them.
+    ln -s "$(command -v fdfind)" /opt/bin/fd
+    ln -s "$(command -v batcat)" /opt/bin/bat
+
+    # ------------------------------------------------------------------
+    # Resolve a GitHub release asset by pattern instead of hardcoding its
+    # exact filename. This is what makes the build resilient to upstream
+    # renaming/reorganizing assets between releases (the cause of the
+    # `sd` 404): we ask the GitHub API what actually exists for that tag
+    # and download whichever asset matches the regex.
+    #   $1 = "owner/repo"   $2 = tag (e.g. v1.1.0)
+    #   $3 = regex matched against the asset filename, case-insensitively
+    #        (goreleaser projects flip-flop between "Linux"/"linux" across
+    #        releases - lazygit did exactly this between v0.64.1 and v0.65.0).
+    #        Anchor with $ so e.g. ".tar.gz" doesn't also match ".tar.gz.sha256"
+    #   $4 = output filename
+    # ------------------------------------------------------------------
+    fetch_gh_asset() {
+        local repo="$1" tag="$2" pattern="$3" out="$4" url
+        url=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/tags/${tag}" \
+            | jq -r --arg pat "$pattern" '[.assets[].browser_download_url | select(test($pat; "i"))][0]')
+        if [ -z "$url" ] || [ "$url" = "null" ]; then
+            echo "ERROR: no release asset matching '${pattern}' for ${repo}@${tag}" >&2
+            echo "       check https://github.com/${repo}/releases/tag/${tag} and fix the pattern/tag." >&2
+            exit 1
+        fi
+        curl -fsSL -o "$out" "$url"
+    }
+
+    # ---- tools not (reliably) packaged in Ubuntu repos: fetch prebuilt
+    #      static/musl binaries straight from GitHub releases ----------------
+
+    # eza (modern ls) -- latest: v0.23.5
+    fetch_gh_asset eza-community/eza v0.23.5 'eza_x86_64-unknown-linux-musl\.tar\.gz$' eza.tar.gz
+    tar xf eza.tar.gz && install -m755 eza /opt/bin/eza
+
+    # zellij (modern tmux/screen) -- latest: v0.45.1
+    fetch_gh_asset zellij-org/zellij v0.45.1 'zellij-x86_64-unknown-linux-musl\.tar\.gz$' zellij.tar.gz
+    tar xf zellij.tar.gz && install -m755 zellij /opt/bin/zellij
+
+    # dust (modern du) -- latest: v1.2.4
+    fetch_gh_asset bootandy/dust v1.2.4 'dust-v1\.2\.4-x86_64-unknown-linux-musl\.tar\.gz$' dust.tar.gz
+    tar xf dust.tar.gz --strip-components=1 && install -m755 dust /opt/bin/dust
+
+    # duf (modern df) -- latest: v0.9.1
+    fetch_gh_asset muesli/duf v0.9.1 'duf_0\.9\.1_linux_x86_64\.tar\.gz$' duf.tar.gz
+    tar xf duf.tar.gz && install -m755 duf /opt/bin/duf
+
+    # procs (modern ps) -- latest: v0.14.12
+    fetch_gh_asset dalance/procs v0.14.12 'procs-v0\.14\.12-x86_64-linux\.zip$' procs.zip
+    unzip -o procs.zip && install -m755 procs /opt/bin/procs
+
+    # bottom / btm (modern top/htop) -- latest: 0.14.2 (tags have no 'v' prefix)
+    fetch_gh_asset ClementTsang/bottom 0.14.2 'bottom_x86_64-unknown-linux-musl\.tar\.gz$' bottom.tar.gz
+    tar xf bottom.tar.gz && install -m755 btm /opt/bin/btm
+
+    # delta (modern diff, git pager) -- latest: 0.19.2 (tags have no 'v' prefix)
+    fetch_gh_asset dandavison/delta 0.19.2 'delta-0\.19\.2-x86_64-unknown-linux-musl\.tar\.gz$' delta.tar.gz
+    tar xf delta.tar.gz --strip-components=1 && install -m755 delta /opt/bin/delta
+
+    # sd (modern sed) -- latest: v1.1.0
+    fetch_gh_asset chmln/sd v1.1.0 'x86_64-unknown-linux-gnu\.tar\.gz$' sd.tar.gz
+    tar xf sd.tar.gz --strip-components=1 && install -m755 sd /opt/bin/sd
+
+    # choose (modern cut/awk) -- last confirmed release: v1.3.4
+    fetch_gh_asset theryangeary/choose v1.3.4 'choose-x86_64-unknown-linux-musl$' choose
+    install -m755 choose /opt/bin/choose
+
+    # xh (modern curl/httpie) -- latest: v0.26.2
+    fetch_gh_asset ducaale/xh v0.26.2 'xh-v0\.26\.2-x86_64-unknown-linux-musl\.tar\.gz$' xh.tar.gz
+    tar xf xh.tar.gz --strip-components=1 && install -m755 xh /opt/bin/xh
+
+    # hyperfine (benchmarking) -- latest: v1.20.0
+    fetch_gh_asset sharkdp/hyperfine v1.20.0 'hyperfine-v1\.20\.0-x86_64-unknown-linux-musl\.tar\.gz$' hyperfine.tar.gz
+    tar xf hyperfine.tar.gz --strip-components=1 && install -m755 hyperfine /opt/bin/hyperfine
+
+    # lazygit (git TUI) -- latest: 0.65.0
+    fetch_gh_asset jesseduffield/lazygit v0.65.0 'lazygit_0\.65\.0_linux_x86_64\.tar\.gz$' lazygit.tar.gz
+    tar xf lazygit.tar.gz && install -m755 lazygit /opt/bin/lazygit
+
+    # tealdeer / tldr (quick docs) -- project moved to tealdeer-rs/tealdeer;
+    # latest: v1.9.0
+    fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-x86_64-musl$' tldr
+    install -m755 tldr /opt/bin/tldr
+
+    # jless (interactive JSON viewer) -- last confirmed release: v0.9.0
+    fetch_gh_asset PaulJuliusMartinez/jless v0.9.0 'jless-v0\.9\.0-x86_64-unknown-linux-musl\.tar\.gz$' jless.tar.gz
+    tar xf jless.tar.gz && install -m755 jless /opt/bin/jless
+
+    # starship prompt -- install script always grabs the current latest release
+    curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /opt/bin
+
+    # ---- tokei and broot: recent releases stopped reliably publishing
+    #      per-arch binary assets (tokei's last few releases ship source
+    #      only; broot bundles all platforms into one archive with a layout
+    #      that isn't safe to hardcode a URL against). Build both from
+    #      source via cargo instead, which always gets the true latest
+    #      published version regardless of release-asset packaging.
+    apt-get update
+    apt-get install -y --no-install-recommends cargo rustc pkg-config libssl-dev
+    cargo install --locked --root /opt tokei
+    cargo install --locked --root /opt broot
+    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev
+    rm -rf /var/lib/apt/lists/* /root/.cargo /root/.cache
+
+    # ------------------------------------------------------------------
+    # Bake shell integration (key bindings + completions) into the image
+    # at BUILD time, so using it at runtime is a single `cat`/`source` -
+    # no per-keystroke apptainer exec, and it works read-only from the
+    # squashfs (no writes into $HOME needed).
+    # ------------------------------------------------------------------
+    mkdir -p /opt/etc
+    {
+        echo "# Auto-generated at 'apptainer build' time - do not edit by hand."
+        echo "# Regenerate by rebuilding the image (see toolbox.def)."
+        echo
+
+        echo "# --- fzf: Ctrl-T (file), Ctrl-R (history), Alt-C (cd) + completion ---"
+        /opt/bin/fzf --bash
+        echo
+
+        echo "# --- zoxide: 'z'/'zi' smart cd ---"
+        /opt/bin/zoxide init bash
+        echo
+
+        echo "# --- starship prompt ---"
+        /opt/bin/starship init bash
+        echo
+
+        echo "# --- ripgrep completion ---"
+        /opt/bin/rg --generate complete-bash 2>/dev/null || true
+        echo
+
+        echo "# --- fd completion ---"
+        /opt/bin/fd --gen-completions bash 2>/dev/null || true
+        echo
+    } > /opt/etc/shell-integration.bash
+
+    # cleanup build artifacts to keep the final image small
+    cd / && rm -rf /tmp/* /root/.cache
+
+%environment
+    export PATH=/opt/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%runscript
+    if [ "${1:-}" = "install" ] || [ "${1:-}" = "toolbox-install" ]; then
+        shift
+        exec /opt/bin/toolbox-install "$@"
+    fi
+    exec /bin/bash --login "$@"
+
+%startscript
+    # Runs once when `apptainer instance start` launches the instance.
+    # Nothing needs to actively run - the instance's own init keeps the
+    # mount namespace (and therefore the mounted squashfs) alive in the
+    # background, which is what makes later `apptainer exec instance://...`
+    # calls fast (no re-mount/re-init cost per command).
+    :

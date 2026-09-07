@@ -1,0 +1,270 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+# ---------------------------------------------------------------------------
+# "toolbox.sif" (ARM64/aarch64 build) - modern CLI replacements, packed into
+# a single SquashFS file.
+#
+# Rationale: on HPC systems $HOME often has an INODE quota, not just a space
+# quota. Installing ~20 Rust/Go tools natively (cargo install, per-tool
+# ~/.local/bin, shared libs, etc.) can burn tens of thousands of inodes.
+# A Singularity/Apptainer image is one file on disk, so no matter how much
+# software lives inside it, it costs your quota a single inode.
+#
+# IMPORTANT - building this on ARM64:
+#   `Bootstrap: docker / From: ubuntu:24.04` is a multi-arch manifest, so
+#   Apptainer pulls the aarch64 layer automatically PROVIDED the build runs
+#   on an aarch64 host. Options:
+#     - build natively on an arm64 machine (arm64 workstation, AWS Graviton
+#       instance, arm64 GitHub Actions runner, arm64 HPC login/build node):
+#         apptainer build --fakeroot toolbox-arm64.sif recipes/toolbox-arm64.def
+#     - build via Sylabs remote builder, forcing the target arch:
+#         apptainer build --remote --arch arm64 toolbox-arm64.sif recipes/toolbox-arm64.def
+#   Building an arm64 image on an x86_64 host via QEMU/binfmt_misc emulation
+#   is possible but slow and occasionally flaky with apt - avoid unless you
+#   have no arm64 build host available.
+#
+# A note on gnu vs musl: the x86_64 edition of this file preferred musl
+# static binaries so they'd run on HPC login nodes with an unpredictable
+# glibc. That concern doesn't apply the same way here: this container ships
+# its OWN Ubuntu 24.04 glibc, matched to whatever the binaries below need,
+# regardless of the host's userspace. Several tools don't publish an
+# aarch64-musl asset at all, so this file uses aarch64-gnu wherever that's
+# the officially published target and falls back to musl only where the
+# project provides it.
+#
+# A handful of tools either don't reliably publish aarch64 binaries at all,
+# or their asset naming isn't stable enough to hardcode with confidence.
+# For those (procs, choose, broot, tokei, jless) this file builds from
+# source via cargo instead of guessing a download URL, then removes the
+# Rust toolchain again so it doesn't bloat the final image.
+#
+# Versions below are pinned for reproducibility and were the latest stable
+# release of each project as of 2026-09-06 - bump them by checking each
+# project's GitHub "Releases" page; asset names occasionally change between
+# releases, and arm64 assets in particular are sometimes added/renamed/
+# dropped independently of the x86_64 ones - verify before building.
+# ---------------------------------------------------------------------------
+
+%files
+    scripts/toolbox-bashrc.sh /opt/etc/toolbox-bashrc.sh
+    scripts/toolbox-install.sh /opt/bin/toolbox-install
+
+%labels
+    Author      you@example.org
+    Description Modern CLI tool replacements bundled as a single-file image (arm64)
+    Version     1.0
+    Arch        arm64
+
+%help
+    Install toolbox integration into ~/.bashrc:
+        apptainer run --app install toolbox-arm64.sif
+        # or
+        apptainer run toolbox-arm64.sif install
+        # or
+        apptainer exec toolbox-arm64.sif toolbox-install
+
+    One-off usage:
+        apptainer exec toolbox-arm64.sif <tool> [args...]
+        apptainer shell toolbox-arm64.sif    # interactive shell with PATH set
+
+    Recommended (fast, persistent) usage - keep a background instance
+    running and exec into it, avoiding per-command container startup cost:
+        apptainer instance start toolbox-arm64.sif toolbox
+        apptainer exec instance://toolbox rg --hidden "TODO" .
+        apptainer instance stop toolbox
+
+    Shell integration (fzf key bindings, zoxide, starship, completions)
+    baked in at build time:
+        source <(apptainer exec instance://toolbox cat /opt/etc/shell-integration.bash)
+
+    See the accompanying ~/.bashrc integration script: it starts the instance once per
+    login node, defines a shell function per tool, and sources the
+    integration script above - giving you "native" commands with ZERO
+    extra inodes in $HOME beyond the .sif file itself.
+
+%apprun install
+    exec /opt/bin/toolbox-install "$@"
+
+%apphelp install
+    Installs the toolbox by appending the shell integration snippet to ~/.bashrc.
+    Usage:
+        apptainer run --app install <image.sif> [target_bashrc]
+
+%post -c /bin/bash
+    # ^ IMPORTANT: `-c /bin/bash` on the %post line forces this section to
+    # run under bash. Without it, Apptainer's remote builder (and some local
+    # configurations) run %post under /bin/sh, which on Debian/Ubuntu is
+    # dash - dash has no `pipefail`, so `set -euo pipefail` aborts
+    # immediately with "Illegal option -o pipefail" before any of the
+    # commands below ever run. (Unlike %runscript/%test, %post does NOT
+    # honor an in-body `#!` shebang line - the shell must be selected here,
+    # on the section header itself.)
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl wget tar xz-utils unzip git jq \
+        ripgrep fd-find bat zoxide fzf tmux neovim \
+    && rm -rf /var/lib/apt/lists/*
+    # ^ apt resolves these to their native aarch64 packages automatically
+    #   as long as this %post runs inside an aarch64 container - no changes
+    #   needed here versus the x86_64 definition.
+
+    mkdir -p /opt/bin /opt/etc
+    cd /tmp
+
+    # Set permissions and symlinks for toolbox installer and scripts
+    chmod +x /opt/bin/toolbox-install
+    chmod 644 /opt/etc/toolbox-bashrc.sh
+    ln -sf /opt/bin/toolbox-install /opt/bin/install-toolbox
+
+    # Ubuntu ships fd-find / bat under different binary names to avoid
+    # clashing with older unrelated packages - normalize them.
+    ln -s "$(command -v fdfind)" /opt/bin/fd
+    ln -s "$(command -v batcat)" /opt/bin/bat
+
+    # ------------------------------------------------------------------
+    # Resolve a GitHub release asset by pattern instead of hardcoding its
+    # exact filename. This is what makes the build resilient to upstream
+    # renaming/reorganizing assets between releases (the cause of the `sd`
+    # 404 on this file: its changelog claimed an aarch64-gnu target but it
+    # actually only ships aarch64-musl) - we ask the GitHub API what
+    # actually exists for that tag and download whichever asset matches.
+    #   $1 = "owner/repo"   $2 = tag (e.g. v1.1.0)
+    #   $3 = regex matched against the asset filename, case-insensitively
+    #        (goreleaser projects flip-flop between "Linux"/"linux" across
+    #        releases - lazygit did exactly this between v0.64.1 and v0.65.0).
+    #        Anchor with $ so e.g. ".tar.gz" doesn't also match ".tar.gz.sha256"
+    #   $4 = output filename
+    # ------------------------------------------------------------------
+    fetch_gh_asset() {
+        local repo="$1" tag="$2" pattern="$3" out="$4" url
+        url=$(curl -fsSL "https://api.github.com/repos/${repo}/releases/tags/${tag}" \
+            | jq -r --arg pat "$pattern" '[.assets[].browser_download_url | select(test($pat; "i"))][0]')
+        if [ -z "$url" ] || [ "$url" = "null" ]; then
+            echo "ERROR: no release asset matching '${pattern}' for ${repo}@${tag}" >&2
+            echo "       check https://github.com/${repo}/releases/tag/${tag} and fix the pattern/tag." >&2
+            exit 1
+        fi
+        curl -fsSL -o "$out" "$url"
+    }
+
+    # ---- tools not (reliably) packaged in Ubuntu repos: fetch prebuilt
+    #      aarch64 binaries straight from GitHub releases ---------------------
+
+    # eza (modern ls) - gnu target (no aarch64-musl asset published)
+    fetch_gh_asset eza-community/eza v0.23.5 'eza_aarch64-unknown-linux-gnu\.tar\.gz$' eza.tar.gz
+    tar xf eza.tar.gz && install -m755 eza /opt/bin/eza
+
+    # zellij (modern tmux/screen) - musl target published for aarch64
+    fetch_gh_asset zellij-org/zellij v0.45.1 'zellij-aarch64-unknown-linux-musl\.tar\.gz$' zellij.tar.gz
+    tar xf zellij.tar.gz && install -m755 zellij /opt/bin/zellij
+
+    # dust (modern du) - gnu target
+    fetch_gh_asset bootandy/dust v1.2.4 'dust-v1\.2\.4-aarch64-unknown-linux-gnu\.tar\.gz$' dust.tar.gz
+    tar xf dust.tar.gz --strip-components=1 && install -m755 dust /opt/bin/dust
+
+    # duf (modern df) - goreleaser uses "arm64" naming, not "aarch64"
+    fetch_gh_asset muesli/duf v0.9.1 'duf_0\.9\.1_linux_arm64\.tar\.gz$' duf.tar.gz
+    tar xf duf.tar.gz && install -m755 duf /opt/bin/duf
+
+    # bottom / btm (modern top/htop) - gnu target
+    fetch_gh_asset ClementTsang/bottom 0.14.2 'bottom_aarch64-unknown-linux-gnu\.tar\.gz$' bottom.tar.gz
+    tar xf bottom.tar.gz && install -m755 btm /opt/bin/btm
+
+    # delta (modern diff, git pager) - gnu target
+    fetch_gh_asset dandavison/delta 0.19.2 'delta-0\.19\.2-aarch64-unknown-linux-gnu\.tar\.gz$' delta.tar.gz
+    tar xf delta.tar.gz --strip-components=1 && install -m755 delta /opt/bin/delta
+
+    # sd (modern sed) -- resolved by pattern rather than hardcoded, since
+    # its actual aarch64 asset is musl despite the changelog saying gnu
+    fetch_gh_asset chmln/sd v1.1.0 'aarch64-unknown-linux-(gnu|musl)\.tar\.gz$' sd.tar.gz
+    tar xf sd.tar.gz --strip-components=1 && install -m755 sd /opt/bin/sd
+
+    # xh (modern curl/httpie) - musl target published for aarch64
+    fetch_gh_asset ducaale/xh v0.26.2 'xh-v0\.26\.2-aarch64-unknown-linux-musl\.tar\.gz$' xh.tar.gz
+    tar xf xh.tar.gz --strip-components=1 && install -m755 xh /opt/bin/xh
+
+    # hyperfine (benchmarking) - gnu target
+    fetch_gh_asset sharkdp/hyperfine v1.20.0 'hyperfine-v1\.20\.0-aarch64-unknown-linux-gnu\.tar\.gz$' hyperfine.tar.gz
+    tar xf hyperfine.tar.gz --strip-components=1 && install -m755 hyperfine /opt/bin/hyperfine
+
+    # lazygit (git TUI) - goreleaser uses "arm64" naming
+    fetch_gh_asset jesseduffield/lazygit v0.65.0 'lazygit_0\.65\.0_linux_arm64\.tar\.gz$' lazygit.tar.gz
+    tar xf lazygit.tar.gz && install -m755 lazygit /opt/bin/lazygit
+
+    # tealdeer / tldr (quick docs) - project moved to tealdeer-rs/tealdeer;
+    # musl target published for aarch64
+    fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-aarch64-musl$' tldr
+    install -m755 tldr /opt/bin/tldr
+
+    # starship prompt - install script auto-detects arch, no change needed
+    curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /opt/bin
+
+    # ---- tools without a confidently-nameable aarch64 release asset:
+    #      build from source instead of guessing a URL -----------------------
+    apt-get update
+    apt-get install -y --no-install-recommends cargo rustc pkg-config libssl-dev
+    for crate in procs choose broot tokei jless; do
+        cargo install --locked --root /opt "$crate"
+    done
+    apt-get purge -y --auto-remove cargo rustc pkg-config libssl-dev
+    rm -rf /var/lib/apt/lists/* /root/.cargo /root/.cache
+
+    # ------------------------------------------------------------------
+    # Bake shell integration (key bindings + completions) into the image
+    # at BUILD time, so using it at runtime is a single `cat`/`source` -
+    # no per-keystroke apptainer exec, and it works read-only from the
+    # squashfs (no writes into $HOME needed).
+    # ------------------------------------------------------------------
+    mkdir -p /opt/etc
+    {
+        echo "# Auto-generated at 'apptainer build' time - do not edit by hand."
+        echo "# Regenerate by rebuilding the image (see toolbox-arm64.def)."
+        echo
+
+        echo "# --- fzf: Ctrl-T (file), Ctrl-R (history), Alt-C (cd) + completion ---"
+        /opt/bin/fzf --bash
+        echo
+
+        echo "# --- zoxide: 'z'/'zi' smart cd ---"
+        /opt/bin/zoxide init bash
+        echo
+
+        echo "# --- starship prompt ---"
+        /opt/bin/starship init bash
+        echo
+
+        echo "# --- ripgrep completion ---"
+        /opt/bin/rg --generate complete-bash 2>/dev/null || true
+        echo
+
+        echo "# --- fd completion ---"
+        /opt/bin/fd --gen-completions bash 2>/dev/null || true
+        echo
+    } > /opt/etc/shell-integration.bash
+
+    # cleanup build artifacts to keep the final image small
+    cd / && rm -rf /tmp/* /root/.cache
+
+%environment
+    export PATH=/opt/bin:$PATH
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+
+%runscript
+    if [ "${1:-}" = "install" ] || [ "${1:-}" = "toolbox-install" ]; then
+        shift
+        exec /opt/bin/toolbox-install "$@"
+    fi
+    exec /bin/bash --login "$@"
+
+%startscript
+    # Runs once when `apptainer instance start` launches the instance.
+    # Nothing needs to actively run - the instance's own init keeps the
+    # mount namespace (and therefore the mounted squashfs) alive in the
+    # background, which is what makes later `apptainer exec instance://...`
+    # calls fast (no re-mount/re-init cost per command).
+    :
