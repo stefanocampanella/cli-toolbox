@@ -65,7 +65,8 @@ From: ubuntu:24.04
     exec /opt/bin/toolbox-install "$@"
 
 %apphelp install
-    Installs the toolbox by appending the shell integration snippet to ~/.bashrc.
+    Installs the toolbox by appending the shell integration snippet to ~/.bashrc
+    and setting up the default Zellij layout to load a login shell.
     Usage:
         apptainer run --app install <image.sif> [target_bashrc]
 
@@ -227,7 +228,7 @@ From: ubuntu:24.04
         echo
 
         echo "# --- starship prompt ---"
-        starship init bash | sed 's|/opt/bin/starship|starship|g'
+        starship init bash --print-full-init | sed 's|/opt/bin/starship|starship|g'
         echo
 
         echo "# --- ripgrep completion ---"

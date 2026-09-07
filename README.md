@@ -56,7 +56,7 @@ Or download the pre-built image from GitHub Container Registry (GHCR).
 
 ### 2. Install Shell Integration
 
-Run the built-in install command to append the configuration snippet to `~/.bashrc`:
+Run the built-in install command to append the configuration snippet to `~/.bashrc` and configure the default Zellij layout (to load your login shell):
 
 ```bash
 apptainer run --app install toolbox.sif
