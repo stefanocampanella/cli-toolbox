@@ -37,32 +37,15 @@ for _tb_tool in eza rg fd bat zoxide dust duf procs btm delta sd choose xh \
 done
 unset _tb_tool
 
-starship() {
-    if [ "${1:-}" = "init" ]; then
-        if [[ "$*" == *"--print-full-init"* ]]; then
-            _tb starship "$@" | sed 's|/opt/bin/starship|starship|g'
-        else
-            _tb starship "$@" --print-full-init | sed 's|/opt/bin/starship|starship|g'
-        fi
-    else
-        _tb starship "$@"
-    fi
-}
-
 # --- 4. Key bindings & completion -------------------------------------------
-# fzf's Ctrl-T / Ctrl-R / Alt-C, zoxide's `z`/`zi`, the starship prompt, and
-# rg/fd completion were all generated and baked into the image at BUILD
-# time (see toolbox.def). Sourcing them here is one exec call per new shell
-# - no per-keystroke container overhead.
+# fzf's Ctrl-T / Ctrl-R / Alt-C, zoxide's `z`/`zi`, and rg/fd completion were
+# all generated and baked into the image at BUILD time (see toolbox.def).
+# Sourcing them here is one exec call per new shell - no per-keystroke container overhead.
 if apptainer instance list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx "$TOOLBOX_INSTANCE"; then
     source <(apptainer exec "instance://$TOOLBOX_INSTANCE" cat /opt/etc/shell-integration.bash)
 else
     source <(apptainer exec "$TOOLBOX_SIF" cat /opt/etc/shell-integration.bash)
 fi
-
-# Optional: enable the starship prompt (defined by the sourced init above)
-# eval "$(starship init bash)"   # already emitted directly if starship was
-                                  # included in shell-integration.bash
 
 # Optional: stop the instance when the LAST shell on this node exits.
 # Left disabled by default (instances are cheap to leave running and

@@ -21,7 +21,7 @@ This project packages ~20 modern CLI tools into a single container image. Regard
 | **System & Disk** | `dust` (du), `duf` (df), `procs` (ps), `bottom` / `btm` (top/htop) |
 | **Text & Utilities** | `delta` (diff/pager), `sd` (sed), `choose` (cut/awk), `xh` (curl/httpie) |
 | **Terminal & Workflow** | `neovim` / `nvim`, `lazygit`, `broot`, `tldr`, `fzf` |
-| **Productivity & Dev** | `starship` (prompt), `hyperfine` (benchmarking), `tokei` (code stats) |
+| **Productivity & Dev** | `hyperfine` (benchmarking), `tokei` (code stats) |
 
 ## Repository Structure
 
@@ -81,4 +81,4 @@ source ~/.bashrc
 Once installed into your `~/.bashrc`:
 - The background Apptainer instance is automatically started once per login session.
 - All CLI utilities (`rg`, `fd`, `bat`, `eza`, `lazygit`, `nvim`, etc.) are available directly in your shell with zero overhead.
-- Completions and keybindings (`fzf` Ctrl-R / Ctrl-T, `zoxide`, `starship`) are automatically loaded.
+- Completions and keybindings (`fzf` Ctrl-R / Ctrl-T, `zoxide`) are automatically loaded.

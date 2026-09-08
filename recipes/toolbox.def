@@ -52,7 +52,7 @@ From: ubuntu:24.04
         apptainer exec instance://toolbox rg --hidden "TODO" .
         apptainer instance stop toolbox
 
-    Shell integration (fzf key bindings, zoxide, starship, completions)
+    Shell integration (fzf key bindings, zoxide, completions)
     baked in at build time:
         source <(apptainer exec instance://toolbox cat /opt/etc/shell-integration.bash)
 
@@ -183,9 +183,6 @@ From: ubuntu:24.04
     fetch_gh_asset tealdeer-rs/tealdeer v1.9.0 'tealdeer-linux-x86_64-musl$' tldr
     install -m755 tldr /opt/bin/tldr
 
-    # starship prompt -- install script always grabs the current latest release
-    curl -fsSL https://starship.rs/install.sh | sh -s -- --yes --bin-dir /opt/bin
-
     # ---- tokei and broot: recent releases stopped reliably publishing
     #      per-arch binary assets (tokei's last few releases ship source
     #      only; broot bundles all platforms into one archive with a layout
@@ -220,10 +217,6 @@ From: ubuntu:24.04
 
         echo "# --- zoxide: 'z'/'zi' smart cd ---"
         zoxide init bash | sed -e 's|\\command zoxide|zoxide|g' -e 's|command zoxide|zoxide|g'
-        echo
-
-        echo "# --- starship prompt ---"
-        starship init bash --print-full-init | sed 's|/opt/bin/starship|starship|g'
         echo
 
         echo "# --- ripgrep completion ---"
