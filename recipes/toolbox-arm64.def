@@ -87,8 +87,7 @@ From: ubuntu:24.04
     exec /opt/bin/toolbox-install "$@"
 
 %apphelp install
-    Installs the toolbox by appending the shell integration snippet to ~/.bashrc
-    and setting up the default Zellij layout to load a login shell.
+    Installs the toolbox by appending the shell integration snippet to ~/.bashrc.
     Usage:
         apptainer run --app install <image.sif> [target_bashrc]
 
@@ -108,7 +107,7 @@ From: ubuntu:24.04
     apt-get update
     apt-get install -y --no-install-recommends \
         ca-certificates curl wget tar xz-utils unzip git jq \
-        ripgrep fd-find bat zoxide tmux neovim \
+        ripgrep fd-find bat zoxide neovim \
     && rm -rf /var/lib/apt/lists/*
     # ^ apt resolves these to their native aarch64 packages automatically
     #   as long as this %post runs inside an aarch64 container - no changes
@@ -160,10 +159,6 @@ From: ubuntu:24.04
     # eza (modern ls) - gnu target (no aarch64-musl asset published)
     fetch_gh_asset eza-community/eza v0.23.5 'eza_aarch64-unknown-linux-gnu\.tar\.gz$' eza.tar.gz
     tar xf eza.tar.gz && install -m755 eza /opt/bin/eza
-
-    # zellij (modern tmux/screen) - musl target published for aarch64
-    fetch_gh_asset zellij-org/zellij v0.45.1 'zellij-aarch64-unknown-linux-musl\.tar\.gz$' zellij.tar.gz
-    tar xf zellij.tar.gz && install -m755 zellij /opt/bin/zellij
 
     # dust (modern du) - gnu target
     fetch_gh_asset bootandy/dust v1.2.4 'dust-v1\.2\.4-aarch64-unknown-linux-gnu\.tar\.gz$' dust.tar.gz
@@ -263,7 +258,6 @@ From: ubuntu:24.04
     export PATH=/opt/bin:$PATH
     export LC_ALL=C.UTF-8
     export LANG=C.UTF-8
-    export ZELLIJ_SOCKET_DIR="${ZELLIJ_SOCKET_DIR:-/tmp/zellij-${USER:-$UID}}"
 
 %runscript
     if [ "${1:-}" = "install" ] || [ "${1:-}" = "toolbox-install" ]; then

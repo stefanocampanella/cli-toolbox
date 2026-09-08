@@ -5,7 +5,6 @@
 
 export TOOLBOX_SIF="${TOOLBOX_SIF:-$HOME/toolbox.sif}"
 export TOOLBOX_INSTANCE="${TOOLBOX_INSTANCE:-toolbox}"
-export ZELLIJ_SOCKET_DIR="${ZELLIJ_SOCKET_DIR:-/tmp/zellij-${USER:-$UID}}"
 
 # --- 1. Ensure the background instance is running -------------------------
 # `instance start` pays the squashfs-mount/namespace-setup cost ONCE. Every
@@ -32,7 +31,7 @@ _tb() {
 # Costs ZERO extra inodes (functions live only in the already-existing
 # ~/.bashrc), unlike per-tool wrapper scripts or symlinks in ~/bin.
 for _tb_tool in eza rg fd bat zoxide dust duf procs btm delta sd choose xh \
-                hyperfine tokei lazygit broot tldr zellij nvim tmux \
+                hyperfine tokei lazygit broot tldr nvim \
                 fzf; do
     eval "${_tb_tool}() { _tb ${_tb_tool} \"\$@\"; }"
 done

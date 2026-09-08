@@ -20,7 +20,7 @@ This project packages ~20 modern CLI tools into a single container image. Regard
 | **Core Replacements** | `eza` (ls), `ripgrep` / `rg` (grep), `fd` (find), `bat` (cat), `zoxide` (cd) |
 | **System & Disk** | `dust` (du), `duf` (df), `procs` (ps), `bottom` / `btm` (top/htop) |
 | **Text & Utilities** | `delta` (diff/pager), `sd` (sed), `choose` (cut/awk), `xh` (curl/httpie) |
-| **Terminal & Workflow** | `zellij` (tmux/screen), `tmux`, `neovim` / `nvim`, `lazygit`, `broot`, `tldr`, `fzf` |
+| **Terminal & Workflow** | `neovim` / `nvim`, `lazygit`, `broot`, `tldr`, `fzf` |
 | **Productivity & Dev** | `starship` (prompt), `hyperfine` (benchmarking), `tokei` (code stats) |
 
 ## Repository Structure
@@ -56,7 +56,7 @@ Or download the pre-built image from GitHub Container Registry (GHCR).
 
 ### 2. Install Shell Integration
 
-Run the built-in install command to append the configuration snippet to `~/.bashrc` and configure the default Zellij layout (to load your login shell):
+Run the built-in install command to append the configuration snippet to `~/.bashrc`:
 
 ```bash
 apptainer run --app install toolbox.sif
